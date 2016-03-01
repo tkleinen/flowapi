@@ -139,11 +139,26 @@ class Instance:
         response = self.get_response(url)
         return (response['survey_instances'],response['meta'])
 
-    def get_registration_instances(self, surveyId, key='surveyedLocaleIdentifier'):
+#     def get_registration_instances(self, surveyId, key='surveyedLocaleIdentifier'):
+#         '''Retrieve dict of survey instances, indexed by key for use as lookup table'''
+#         registration,_ = self.get_survey_instances(surveyId=surveyId)
+#         return {r[key]: r for r in registration}
+    
+    def get_registration_instances(self, surveyId, key='surveyedLocaleIdentifier', beginDate=None, endDate = None):
         '''Retrieve dict of survey instances, indexed by key for use as lookup table'''
-        registration,_ = self.get_survey_instances(surveyId=surveyId)
-        return {r[key]: r for r in registration}
-            
+        instances = {}
+        kwargs = {'surveyId': surveyId }
+        if beginDate:
+            kwargs['beginDate'] = beginDate
+        if endDate:
+            kwargs['endDate'] = endDate
+        reg, meta = self.get_survey_instances(**kwargs)
+        while reg:
+            instances.update({r[key]: r for r in reg})
+            kwargs['since'] = meta['since']
+            reg, meta = self.get_survey_instances(**kwargs)
+        return instances
+                
     def get_questions(self,survey_id):
         '''Retrieve a list of questions for a survey'''
         url = self.format_url('questions?surveyId={id}'.format(id=survey_id))
@@ -162,16 +177,26 @@ class Instance:
             url = self.format_url('question_groups')
         return self.get_response(url,'question_groups')
 
-    def datefilter(self,answers):
+    def format_answers(self,answers):
         for a in answers:
-            if a['type'] == 'DATE':
-                a['value'] =  datetime.utcfromtimestamp(int(a['value'])/1000)
+            try:
+                atype = a['type']
+                if atype == 'DATE':
+                    a['value'] =  datetime.utcfromtimestamp(int(a['value'])/1000)
+                elif atype == 'OPTION':
+                    items = json.loads(a['value'])
+                    a['value'] = '|'.join([item['text'] for item in items])
+                elif atype == 'CASCADE':
+                    items = json.loads(a['value'])
+                    a['value'] = '|'.join([item['name'] for item in items])
+            except:
+                pass
         return answers
     
     def get_answers(self, survey_instance_id):
         '''Retrieve answers for a survey instance'''
         url = self.format_url('question_answers?surveyInstanceId={id}'.format(id=survey_instance_id))
-        return self.datefilter(self.get_response(url,'question_answers'))
+        return self.format_answers(self.get_response(url,'question_answers'))
     
     def to_csv(self, surveyId, destination, callback=None, reginfo=None):
         ''' downloads all answers for a survey and exports to destination in csv format
@@ -189,7 +214,7 @@ class Instance:
 
         # retrieve questions and build field names (column headers)
         questions = self.get_questions(surveyId)
-        fieldnames.extend(['%s|%s'% (q['keyId'],q['displayName']) for q in questions])
+        fieldnames.extend([q['displayName'] for q in questions])
 
         regfields = None
         reginst = None        
@@ -212,7 +237,7 @@ class Instance:
                 if callback:
                     # report progress
                     if not callback(instance):
-                        print u'abandonné'
+                        print 'abandonné'
                         return
                     
                 # get standard values from survey instance
@@ -220,7 +245,7 @@ class Instance:
                 
                 # get the answers for this survey instance
                 answers = self.get_answers(instance['keyId'])
-                row.update({'%s|%s' % (a['questionID'],a['questionText']):a['value'] for a in answers})
+                row.update({a['questionText']:a['value'] for a in answers})
                 
                 if reginfo:
                     # add related registration form info to the row
@@ -236,7 +261,7 @@ class Instance:
                     writer.writerow(row)
                 except Exception as e:
                     # some error occurred while writing the row
-                    print u'\n{error}\n{row}'.format(error=e,row=row)
+                    print '\n{error}\n{row}'.format(error=e,row=row)
 
             # get next bunch of survey instances 
             instances,meta = self.get_survey_instances(surveyId=surveyId,since=meta['since'])

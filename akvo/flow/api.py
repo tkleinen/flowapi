@@ -28,8 +28,6 @@ import platform
 from datetime import datetime
 from hashlib import sha1
 
-windows = platform.system() == 'Windows'
-
 def utf8(d):
     ''' encode dict or list as utf-8 (needed for windows) '''
     if isinstance(d,list):
@@ -204,7 +202,7 @@ class Instance:
                 fieldnames[:0]= regfields.keys()
 
         # create a csv writer and write out the column headers
-        writer = csv.DictWriter(destination, fieldnames=fieldnames)        
+        writer = csv.DictWriter(destination, fieldnames=utf8(fieldnames))        
         writer.writeheader()
         
         # get all survey instances
@@ -214,7 +212,7 @@ class Instance:
                 if callback:
                     # report progress
                     if not callback(instance):
-                        print 'abandonné'
+                        print u'abandonné'
                         return
                     
                 # get standard values from survey instance
@@ -234,12 +232,11 @@ class Instance:
                 try:
                     # convert unix timestamp to human readable form
                     row['date'] = datetime.utcfromtimestamp(int(row['date'])/1000)
-                    if windows:
-                        row = utf8(row)
+                    row = utf8(row)
                     writer.writerow(row)
                 except Exception as e:
                     # some error occurred while writing the row
-                    print '\n{error}\n{row}'.format(error=e,row=row)
+                    print u'\n{error}\n{row}'.format(error=e,row=row)
 
             # get next bunch of survey instances 
             instances,meta = self.get_survey_instances(surveyId=surveyId,since=meta['since'])

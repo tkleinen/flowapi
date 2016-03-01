@@ -35,7 +35,7 @@ fields = {'Identifier': 'surveyedLocaleIdentifier', 'Localisation': 'surveyedLoc
 for surveyId in config['SURVEYS']:
     print
     survey = flowAPI.get_survey(surveyId)
-    print surveyId, survey['name']
+    print surveyId
 
     # create new csv file with survey id as name
     with open('{name}.csv'. format(name=surveyId),'w') as destination:
